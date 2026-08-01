@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Organizer Dashboard - XO Event Management</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar" id="xo-navbar"></nav>
+
+<div class="dashboard-layout">
+  <aside class="sidebar">
+    <a href="#" class="active">My Events</a>
+    <a href="#" onclick="openEventModal()">+ Create New Event</a>
+  </aside>
+
+  <main class="main-content">
+    <div class="flex-between mb-20">
+      <h2 class="section-title" style="margin-bottom:0;">My Events</h2>
+      <button class="btn btn-primary" onclick="openEventModal()">+ Create Event</button>
+    </div>
+    <div id="eventsTableWrapper"><p>Loading your events...</p></div>
+  </main>
+</div>
+
+<!-- Create / Edit Event Modal -->
+<div class="modal-overlay hidden" id="eventModal">
+  <div class="modal-box" style="max-width:560px;max-height:90vh;overflow-y:auto;">
+    <h3 style="margin-top:0;" id="modalTitle">Create Event</h3>
+    <form id="eventForm">
+      <input type="hidden" id="eventId">
+      <div class="form-group">
+        <label>Event Title</label>
+        <input type="text" id="title" required>
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <textarea id="description" rows="3"></textarea>
+      </div>
+      <div class="form-group">
+        <label>Category</label>
+        <select id="categoryId" required></select>
+      </div>
+      <div class="form-group">
+        <label>Venue</label>
+        <select id="venueId" required></select>
+      </div>
+      <div class="form-group">
+        <label>Event Image (optional)</label>
+        <input type="file" id="imageFile" accept="image/png, image/jpeg, image/webp, image/gif">
+        <img id="imagePreview" src="" alt="" class="hidden" style="margin-top:10px;max-width:100%;border-radius:10px;max-height:160px;object-fit:cover;">
+        <input type="hidden" id="imageUrl">
+      </div>
+      <div class="form-group">
+        <label>Event Date</label>
+        <input type="date" id="eventDate" required>
+      </div>
+      <div class="flex gap-10">
+        <div class="form-group" style="flex:1;">
+          <label>Start Time</label>
+          <input type="time" id="startTime">
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label>End Time</label>
+          <input type="time" id="endTime">
+        </div>
+      </div>
+      <div class="flex gap-10">
+        <div class="form-group" style="flex:1;">
+          <label>Price (₹, 0 for free)</label>
+          <input type="number" id="price" min="0" value="0">
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label>Total Seats</label>
+          <input type="number" id="totalSeats" min="1" required>
+        </div>
+      </div>
+      <div class="flex gap-10">
+        <button type="button" class="btn btn-outline" style="border-color:#ccc;color:#333;flex:1;" onclick="closeEventModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary" style="flex:1;">Save Event</button>
+      </div>
+      <div id="eventFormMsg"></div>
+    </form>
+  </div>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  const user = requireAuth(['ORGANIZER', 'ADMIN']);
+  let categories = [], venues = [], myEvents = [];
+
+  async function loadDropdowns() {
+    categories = await apiRequest('/categories', 'GET', null, false);
+    venues = await apiRequest('/venues', 'GET', null, false);
+    document.getElementById('categoryId').innerHTML = categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    document.getElementById('venueId').innerHTML = venues.map(v => `<option value="${v.id}">${v.name}, ${v.city}</option>`).join('');
+  }
+
+  async function loadMyEvents() {
+    try {
+      myEvents = await apiRequest(`/events/organizer/${user.id}`);
+      const wrapper = document.getElementById('eventsTableWrapper');
+      if (!myEvents.length) {
+        wrapper.innerHTML = '<p>You haven\'t created any events yet. Click "Create Event" to get started.</p>';
+        return;
+      }
+      wrapper.innerHTML = `
+        <table>
+          <thead><tr><th>Image</th><th>Title</th><th>Date</th><th>Venue</th><th>Seats</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>
+            ${myEvents.map(ev => `
+              <tr>
+                <td>${ev.imageUrl ? `<img src="${ev.imageUrl}" style="width:48px;height:48px;object-fit:cover;border-radius:8px;">` : '—'}</td>
+                <td>${ev.title}</td>
+                <td>${formatDate(ev.eventDate)}</td>
+                <td>${ev.venue ? ev.venue.name : '-'}</td>
+                <td>${ev.availableSeats}/${ev.totalSeats}</td>
+                <td>${statusBadge(ev.status)}</td>
+                <td>
+                  <button class="btn btn-sm btn-dark" onclick="editEvent(${ev.id})">Edit</button>
+                  <button class="btn btn-sm btn-danger" onclick="deleteEvent(${ev.id})">Delete</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    } catch (e) {
+      document.getElementById('eventsTableWrapper').innerHTML = '<p>Could not load events.</p>';
+    }
+  }
+
+  function openEventModal() {
+    document.getElementById('modalTitle').innerText = 'Create Event';
+    document.getElementById('eventForm').reset();
+    document.getElementById('eventId').value = '';
+    document.getElementById('imageUrl').value = '';
+    document.getElementById('imagePreview').classList.add('hidden');
+    document.getElementById('eventModal').classList.remove('hidden');
+  }
+  function closeEventModal() { document.getElementById('eventModal').classList.add('hidden'); }
+
+  document.getElementById('imageFile').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const preview = document.getElementById('imagePreview');
+    preview.src = URL.createObjectURL(file);
+    preview.classList.remove('hidden');
+  });
+
+  async function uploadSelectedImage() {
+    const fileInput = document.getElementById('imageFile');
+    if (!fileInput.files || !fileInput.files[0]) {
+      return document.getElementById('imageUrl').value || null;
+    }
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    const response = await fetch('/api/events/upload-image', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + getToken() },
+      body: formData
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Image upload failed');
+    return data.imageUrl;
+  }
+
+  function editEvent(id) {
+    const ev = myEvents.find(e => e.id === id);
+    document.getElementById('modalTitle').innerText = 'Edit Event';
+    document.getElementById('eventId').value = ev.id;
+    document.getElementById('title').value = ev.title;
+    document.getElementById('description').value = ev.description || '';
+    document.getElementById('categoryId').value = ev.category.id;
+    document.getElementById('venueId').value = ev.venue.id;
+    document.getElementById('eventDate').value = ev.eventDate;
+    document.getElementById('startTime').value = ev.startTime || '';
+    document.getElementById('endTime').value = ev.endTime || '';
+    document.getElementById('price').value = ev.price;
+    document.getElementById('totalSeats').value = ev.totalSeats;
+    document.getElementById('imageUrl').value = ev.imageUrl || '';
+    const preview = document.getElementById('imagePreview');
+    if (ev.imageUrl) {
+      preview.src = ev.imageUrl;
+      preview.classList.remove('hidden');
+    } else {
+      preview.classList.add('hidden');
+    }
+    document.getElementById('eventModal').classList.remove('hidden');
+  }
+
+  async function deleteEvent(id) {
+    if (!confirm('Delete this event? This will also delete all its bookings and reviews. This cannot be undone.')) return;
+    try {
+      await apiRequest(`/events/${id}`, 'DELETE');
+      loadMyEvents();
+    } catch (e) { alert(e.message); }
+  }
+
+  document.getElementById('eventForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = document.getElementById('eventId').value;
+    const msg = document.getElementById('eventFormMsg');
+    msg.innerHTML = '';
+
+    let imageUrl = document.getElementById('imageUrl').value || null;
+    try {
+      const uploaded = await uploadSelectedImage();
+      if (uploaded) imageUrl = uploaded;
+    } catch (err) {
+      msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
+      return;
+    }
+
+    const payload = {
+      title: document.getElementById('title').value,
+      description: document.getElementById('description').value,
+      categoryId: parseInt(document.getElementById('categoryId').value),
+      venueId: parseInt(document.getElementById('venueId').value),
+      eventDate: document.getElementById('eventDate').value,
+      startTime: document.getElementById('startTime').value || null,
+      endTime: document.getElementById('endTime').value || null,
+      price: parseFloat(document.getElementById('price').value || 0),
+      totalSeats: parseInt(document.getElementById('totalSeats').value),
+      imageUrl: imageUrl
+    };
+    try {
+      if (id) {
+        await apiRequest(`/events/${id}`, 'PUT', payload);
+      } else {
+        await apiRequest('/events', 'POST', payload);
+      }
+      closeEventModal();
+      loadMyEvents();
+    } catch (err) {
+      msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
+    }
+  });
+
+  (async () => {
+    await loadDropdowns();
+    await loadMyEvents();
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,55 @@
+# ===================================================
+# RENDER BLUEPRINT for XO Event Management
+# ===================================================
+# This file lets Render auto-provision both the web
+# service and the PostgreSQL database together.
+#
+# Usage: In the Render dashboard, choose
+# "New +" -> "Blueprint" and point it at this repo.
+# Render reads this file automatically.
+# ===================================================
+
+databases:
+  - name: xo-event-db
+    plan: free
+    databaseName: xo_event_db
+    user: xo_admin
+
+services:
+  - type: web
+    name: xo-event-management
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: JWT_SECRET
+        value: sq0HEHoSWgMnkW1MWldMXiu4PUDap7qH7xllkhLdxCYrL3FoEBXmtVtIgDj8Xuc5XMw6JPivGnx6EpJ47LjlBgnG
+      - key: BREVO_API_KEY
+        sync: false
+      - key: BREVO_SENDER_EMAIL
+        sync: false
+      - key: DB_HOST
+        fromDatabase:
+          name: xo-event-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: xo-event-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: xo-event-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: xo-event-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: xo-event-db
+          property: password
+
+
+          

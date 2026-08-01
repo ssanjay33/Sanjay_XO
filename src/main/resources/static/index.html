@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XO Event Management</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar" id="xo-navbar"></nav>
+
+<section class="hero">
+  <h1>Discover & Manage Events with XO</h1>
+  <p>From concerts to conferences — find events you'll love, or create your own with XO Event Management.</p>
+  <form class="search-bar" onsubmit="event.preventDefault(); window.location.href='events.html?search=' + encodeURIComponent(document.getElementById('heroSearch').value);">
+    <input type="text" id="heroSearch" placeholder="Search events, categories, cities...">
+    <button type="submit">Search</button>
+  </form>
+</section>
+
+<div class="container">
+  <div class="flex-between mb-20">
+    <h2 class="section-title" style="margin-bottom:0;">Upcoming Events</h2>
+    <a href="events.html" class="btn btn-dark btn-sm">View All</a>
+  </div>
+  <div class="event-grid" id="eventGrid">
+    <p>Loading events...</p>
+  </div>
+</div>
+
+<div class="container">
+  <h2 class="section-title">Browse by Category</h2>
+  <div class="event-grid" id="categoryGrid" style="grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));"></div>
+</div>
+
+<footer>
+  &copy; 2026 XO Event Management. All rights reserved.
+</footer>
+
+<script src="js/common.js"></script>
+<script>
+  async function loadHomeData() {
+    try {
+      const events = await apiRequest('/events/upcoming', 'GET', null, false);
+      const grid = document.getElementById('eventGrid');
+      grid.innerHTML = '';
+      if (!events.length) {
+        grid.innerHTML = '<p>No upcoming events right now. Check back soon!</p>';
+      }
+      events.slice(0, 6).forEach(ev => {
+        const thumb = ev.imageUrl
+          ? `<div class="thumb" style="background-image:url('${ev.imageUrl}');background-size:cover;background-position:center;"></div>`
+          : `<div class="thumb">${ev.title.charAt(0).toUpperCase()}</div>`;
+        grid.innerHTML += `
+          <a href="event-details.html?id=${ev.id}" class="event-card">
+            ${thumb}
+            <div class="body">
+              <span class="category-tag">${ev.category ? ev.category.name : 'General'}</span>
+              <h3>${ev.title}</h3>
+              <div class="meta">📅 ${formatDate(ev.eventDate)}</div>
+              <div class="meta">📍 ${ev.venue ? ev.venue.name + ', ' + ev.venue.city : 'TBA'}</div>
+              <div class="price">${ev.price > 0 ? formatCurrency(ev.price) : 'Free'}</div>
+            </div>
+          </a>`;
+      });
+    } catch (e) {
+      document.getElementById('eventGrid').innerHTML = '<p>Could not load events. Please make sure the backend server is running.</p>';
+    }
+
+    try {
+      const categories = await apiRequest('/categories', 'GET', null, false);
+      const catGrid = document.getElementById('categoryGrid');
+      catGrid.innerHTML = '';
+      categories.forEach(cat => {
+        catGrid.innerHTML += `
+          <a href="events.html?category=${cat.id}" class="event-card" style="align-items:center; text-align:center; padding:20px 10px;">
+            <div class="body">
+              <h3 style="margin-bottom:4px;">${cat.name}</h3>
+              <div class="meta">${cat.description || ''}</div>
+            </div>
+          </a>`;
+      });
+    } catch (e) { /* ignore */ }
+  }
+  loadHomeData();
+</script>
+</body>
+</html>

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verify Email - XO Event Management</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar" id="xo-navbar"></nav>
+
+<div class="form-card">
+  <h2>Verify Your Email</h2>
+  <p class="subtitle" id="subtitleText">Enter the 6-digit code we sent to your email</p>
+
+  <form id="verifyForm">
+    <div class="form-group">
+      <label>Email Address</label>
+      <input type="email" id="email" required placeholder="you@example.com">
+    </div>
+    <div class="form-group">
+      <label>Verification Code</label>
+      <input type="text" id="code" required maxlength="6" pattern="[0-9]{6}" placeholder="123456" style="letter-spacing:6px;font-size:20px;text-align:center;">
+    </div>
+    <button type="submit" class="btn btn-primary btn-block">Verify & Activate Account</button>
+    <div id="msg"></div>
+  </form>
+
+  <div class="form-footer">
+    Didn't get a code? <a href="#" id="resendLink">Resend code</a>
+  </div>
+  <div class="form-footer" style="margin-top:10px;">
+    <a href="login.html">Back to Login</a>
+  </div>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('email')) {
+    document.getElementById('email').value = params.get('email');
+    document.getElementById('subtitleText').innerText = `Enter the 6-digit code sent to ${params.get('email')}`;
+  }
+
+  document.getElementById('verifyForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('email').value;
+    const code = document.getElementById('code').value;
+    const msg = document.getElementById('msg');
+    msg.innerHTML = '';
+    try {
+      const res = await apiRequest('/auth/verify-email', 'POST', { email, code }, false);
+      msg.innerHTML = `<p class="success-msg">${res.message}</p>`;
+      setTimeout(() => window.location.href = 'login.html', 1500);
+    } catch (err) {
+      msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
+    }
+  });
+
+  document.getElementById('resendLink').addEventListener('click', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('email').value;
+    const msg = document.getElementById('msg');
+    if (!email) { msg.innerHTML = `<p class="error-msg">Please enter your email first.</p>`; return; }
+    try {
+      const res = await apiRequest('/auth/resend-code', 'POST', { email }, false);
+      msg.innerHTML = `<p class="success-msg">${res.message}</p>`;
+    } catch (err) {
+      msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
+    }
+  });
+</script>
+</body>
+</html>

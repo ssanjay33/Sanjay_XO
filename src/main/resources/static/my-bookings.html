@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Bookings - XO Event Management</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar" id="xo-navbar"></nav>
+
+<div class="container">
+  <h2 class="section-title">My Bookings</h2>
+  <div id="bookingsTableWrapper">
+    <p>Loading your bookings...</p>
+  </div>
+</div>
+
+<footer>&copy; 2026 XO Event Management. All rights reserved.</footer>
+
+<script src="js/common.js"></script>
+<script>
+  requireAuth();
+
+  async function loadBookings() {
+    try {
+      const bookings = await apiRequest('/registrations/my-bookings');
+      const wrapper = document.getElementById('bookingsTableWrapper');
+      if (!bookings.length) {
+        wrapper.innerHTML = '<p>You have no bookings yet. <a href="events.html">Browse events</a> to get started.</p>';
+        return;
+      }
+      wrapper.innerHTML = `
+        <table>
+          <thead>
+            <tr>
+              <th>Ticket Code</th><th>Event</th><th>Date</th><th>Tickets</th><th>Amount</th><th>Status</th><th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${bookings.map(b => `
+              <tr>
+                <td>${b.ticketCode}</td>
+                <td><a href="event-details.html?id=${b.event.id}">${b.event.title}</a></td>
+                <td>${formatDate(b.event.eventDate)}</td>
+                <td>${b.numberOfTickets}</td>
+                <td>${formatCurrency(b.totalAmount)}</td>
+                <td>${statusBadge(b.status)}</td>
+                <td>
+                  ${b.status === 'CONFIRMED' ? `<button class="btn btn-danger btn-sm" onclick="cancelBooking(${b.id})">Cancel</button>` : '-'}
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    } catch (e) {
+      document.getElementById('bookingsTableWrapper').innerHTML = '<p>Could not load bookings.</p>';
+    }
+  }
+
+  async function cancelBooking(id) {
+    if (!confirm('Are you sure you want to cancel this booking?')) return;
+    try {
+      await apiRequest(`/registrations/${id}`, 'DELETE');
+      loadBookings();
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+
+  loadBookings();
+</script>
+</body>
+</html>

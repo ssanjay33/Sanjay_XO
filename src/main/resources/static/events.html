@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>All Events - XO Event Management</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar" id="xo-navbar"></nav>
+
+<div class="container">
+  <div class="flex-between mb-20" style="flex-wrap:wrap; gap:12px;">
+    <h2 class="section-title" style="margin-bottom:0;">All Events</h2>
+    <div class="flex gap-10">
+      <input type="text" id="searchInput" placeholder="Search events..." style="padding:10px 16px;border-radius:50px;border:1.5px solid #E4E1F0;">
+      <select id="categoryFilter" style="padding:10px 16px;border-radius:50px;border:1.5px solid #E4E1F0;">
+        <option value="">All Categories</option>
+      </select>
+    </div>
+  </div>
+  <div class="event-grid" id="eventGrid">
+    <p>Loading events...</p>
+  </div>
+</div>
+
+<footer>&copy; 2026 XO Event Management. All rights reserved.</footer>
+
+<script src="js/common.js"></script>
+<script>
+  let allEvents = [];
+
+  async function loadCategories() {
+    const categories = await apiRequest('/categories', 'GET', null, false);
+    const sel = document.getElementById('categoryFilter');
+    categories.forEach(cat => {
+      const opt = document.createElement('option');
+      opt.value = cat.id;
+      opt.textContent = cat.name;
+      sel.appendChild(opt);
+    });
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('category')) sel.value = params.get('category');
+  }
+
+  function renderEvents(events) {
+    const grid = document.getElementById('eventGrid');
+    grid.innerHTML = '';
+    if (!events.length) {
+      grid.innerHTML = '<p>No events found matching your criteria.</p>';
+      return;
+    }
+    events.forEach(ev => {
+      const thumb = ev.imageUrl
+        ? `<div class="thumb" style="background-image:url('${ev.imageUrl}');background-size:cover;background-position:center;"></div>`
+        : `<div class="thumb">${ev.title.charAt(0).toUpperCase()}</div>`;
+      grid.innerHTML += `
+        <a href="event-details.html?id=${ev.id}" class="event-card">
+          ${thumb}
+          <div class="body">
+            <span class="category-tag">${ev.category ? ev.category.name : 'General'}</span>
+            <h3>${ev.title}</h3>
+            <div class="meta">📅 ${formatDate(ev.eventDate)}</div>
+            <div class="meta">📍 ${ev.venue ? ev.venue.name + ', ' + ev.venue.city : 'TBA'}</div>
+            <div class="meta">🎟 ${ev.availableSeats} seats left</div>
+            <div class="price">${ev.price > 0 ? formatCurrency(ev.price) : 'Free'}</div>
+          </div>
+        </a>`;
+    });
+  }
+
+  function applyFilters() {
+    const keyword = document.getElementById('searchInput').value.toLowerCase();
+    const category = document.getElementById('categoryFilter').value;
+    let filtered = allEvents;
+    if (keyword) {
+      filtered = filtered.filter(ev => ev.title.toLowerCase().includes(keyword));
+    }
+    if (category) {
+      filtered = filtered.filter(ev => ev.category && String(ev.category.id) === category);
+    }
+    renderEvents(filtered);
+  }
+
+  async function loadEvents() {
+    try {
+      allEvents = await apiRequest('/events', 'GET', null, false);
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('search')) document.getElementById('searchInput').value = params.get('search');
+      applyFilters();
+    } catch (e) {
+      document.getElementById('eventGrid').innerHTML = '<p>Could not load events.</p>';
+    }
+  }
+
+  document.getElementById('searchInput').addEventListener('input', applyFilters);
+  document.getElementById('categoryFilter').addEventListener('change', applyFilters);
+
+  loadCategories();
+  loadEvents();
+</script>
+</body>
+</html>

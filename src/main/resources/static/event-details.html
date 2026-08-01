@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Event Details - XO Event Management</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar" id="xo-navbar"></nav>
+
+<div class="container" id="eventContainer">
+  <p>Loading event details...</p>
+</div>
+
+<div class="container">
+  <h2 class="section-title">Attendee Reviews</h2>
+  <div id="feedbackList"><p>Loading reviews...</p></div>
+
+  <div class="form-card" style="margin:30px auto 0;" id="feedbackFormWrapper">
+    <h3 style="margin-top:0;">Leave a Review</h3>
+    <form id="feedbackForm">
+      <div class="form-group">
+        <label>Rating (1-5)</label>
+        <select id="rating">
+          <option value="5">5 - Excellent</option>
+          <option value="4">4 - Very Good</option>
+          <option value="3">3 - Good</option>
+          <option value="2">2 - Fair</option>
+          <option value="1">1 - Poor</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Comments</label>
+        <textarea id="comments" rows="3" placeholder="Share your experience..."></textarea>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Submit Review</button>
+      <div id="feedbackMsg"></div>
+    </form>
+  </div>
+</div>
+
+<footer>&copy; 2026 XO Event Management. All rights reserved.</footer>
+
+<div class="modal-overlay hidden" id="bookingModal">
+  <div class="modal-box">
+    <h3 style="margin-top:0;">Book Your Tickets</h3>
+    <form id="bookingForm">
+      <div class="form-group">
+        <label>Number of Tickets</label>
+        <input type="number" id="numTickets" min="1" value="1" required>
+      </div>
+      <p id="totalAmountPreview" style="font-weight:700;color:var(--primary);"></p>
+      <div class="flex gap-10">
+        <button type="button" class="btn btn-outline" style="border-color:#ccc;color:#333;flex:1;" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary" style="flex:1;">Confirm Booking</button>
+      </div>
+      <div id="bookingMsg"></div>
+    </form>
+  </div>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  const params = new URLSearchParams(window.location.search);
+  const eventId = params.get('id');
+  let currentEvent = null;
+
+  async function loadEvent() {
+    try {
+      currentEvent = await apiRequest(`/events/${eventId}`, 'GET', null, false);
+      const ev = currentEvent;
+      const heroThumb = ev.imageUrl
+        ? `background-image:url('${ev.imageUrl}');background-size:cover;background-position:center;`
+        : `background:linear-gradient(135deg,var(--primary),var(--accent));display:flex;align-items:center;justify-content:center;color:#fff;font-size:64px;font-weight:800;`;
+      document.getElementById('eventContainer').innerHTML = `
+        <div style="background:#fff;border-radius:14px;box-shadow:var(--shadow);overflow:hidden;">
+          <div class="thumb" style="height:220px;${heroThumb}">
+            ${ev.imageUrl ? '' : ev.title.charAt(0).toUpperCase()}
+          </div>
+          <div style="padding:30px;">
+            <span class="category-tag">${ev.category ? ev.category.name : 'General'}</span>
+            ${statusBadge(ev.status)}
+            <h1 style="margin:14px 0 6px;">${ev.title}</h1>
+            <p style="color:var(--text-muted);">${ev.description || 'No description provided.'}</p>
+            <div class="mt-20" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;">
+              <div><strong>📅 Date</strong><br>${formatDate(ev.eventDate)}</div>
+              <div><strong>⏰ Time</strong><br>${ev.startTime || 'TBA'} - ${ev.endTime || ''}</div>
+              <div><strong>📍 Venue</strong><br>${ev.venue ? ev.venue.name + ', ' + ev.venue.city : 'TBA'}</div>
+              <div><strong>🎟 Available Seats</strong><br>${ev.availableSeats} / ${ev.totalSeats}</div>
+              <div><strong>👤 Organizer</strong><br>${ev.organizer ? ev.organizer.name : 'N/A'}</div>
+              <div><strong>💰 Price</strong><br>${ev.price > 0 ? formatCurrency(ev.price) : 'Free'}</div>
+            </div>
+            <button class="btn btn-primary mt-20" id="bookBtn" ${ev.availableSeats <= 0 ? 'disabled' : ''}>
+              ${ev.availableSeats <= 0 ? 'Sold Out' : 'Book Now'}
+            </button>
+          </div>
+        </div>
+      `;
+      document.getElementById('bookBtn').addEventListener('click', openModal);
+    } catch (e) {
+      document.getElementById('eventContainer').innerHTML = '<p>Event not found.</p>';
+    }
+  }
+
+  function openModal() {
+    if (!isLoggedIn()) { window.location.href = 'login.html'; return; }
+    document.getElementById('bookingModal').classList.remove('hidden');
+    updatePreview();
+  }
+  function closeModal() { document.getElementById('bookingModal').classList.add('hidden'); }
+
+  function updatePreview() {
+    const n = parseInt(document.getElementById('numTickets').value || '1');
+    const total = currentEvent.price * n;
+    document.getElementById('totalAmountPreview').innerText = `Total: ${formatCurrency(total)}`;
+  }
+  document.getElementById('numTickets').addEventListener('input', updatePreview);
+
+  document.getElementById('bookingForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const numberOfTickets = parseInt(document.getElementById('numTickets').value);
+    const msg = document.getElementById('bookingMsg');
+    try {
+      await apiRequest('/registrations', 'POST', { eventId: currentEvent.id, numberOfTickets });
+      msg.innerHTML = '<p class="success-msg">Booking confirmed! Redirecting to My Bookings...</p>';
+      setTimeout(() => window.location.href = 'my-bookings.html', 1200);
+    } catch (err) {
+      msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
+    }
+  });
+
+  async function loadFeedback() {
+    try {
+      const feedbacks = await apiRequest(`/feedback/event/${eventId}`, 'GET', null, false);
+      const list = document.getElementById('feedbackList');
+      if (!feedbacks.length) {
+        list.innerHTML = '<p>No reviews yet. Be the first to review!</p>';
+        return;
+      }
+      list.innerHTML = feedbacks.map(fb => `
+        <div style="background:#fff;padding:16px;border-radius:12px;box-shadow:var(--shadow);margin-bottom:12px;">
+          <strong>${fb.user ? fb.user.name : 'Anonymous'}</strong> — ${'⭐'.repeat(fb.rating)}
+          <p style="margin:6px 0 0;color:var(--text-muted);">${fb.comments || ''}</p>
+        </div>
+      `).join('');
+    } catch (e) { /* ignore */ }
+  }
+
+  document.getElementById('feedbackForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!isLoggedIn()) { window.location.href = 'login.html'; return; }
+    const rating = parseInt(document.getElementById('rating').value);
+    const comments = document.getElementById('comments').value;
+    const msg = document.getElementById('feedbackMsg');
+    try {
+      await apiRequest('/feedback', 'POST', { eventId: parseInt(eventId), rating, comments });
+      msg.innerHTML = '<p class="success-msg">Thanks for your review!</p>';
+      document.getElementById('comments').value = '';
+      loadFeedback();
+    } catch (err) {
+      msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
+    }
+  });
+
+  loadEvent();
+  loadFeedback();
+</script>
+</body>
+</html>

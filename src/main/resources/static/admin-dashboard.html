@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Panel - XO Event Management</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="navbar" id="xo-navbar"></nav>
+
+<div class="dashboard-layout">
+  <aside class="sidebar">
+    <a href="#" onclick="showTab('overview')" id="tab-overview" class="active">Overview</a>
+    <a href="#" onclick="showTab('users')" id="tab-users">Manage Users</a>
+    <a href="#" onclick="showTab('categories')" id="tab-categories">Categories</a>
+    <a href="#" onclick="showTab('venues')" id="tab-venues">Venues</a>
+    <a href="#" onclick="showTab('events')" id="tab-events">All Events</a>
+  </aside>
+
+  <main class="main-content">
+    <!-- Overview Tab -->
+    <div id="panel-overview">
+      <h2 class="section-title">Dashboard Overview</h2>
+      <div class="stats-row" id="statsRow"></div>
+    </div>
+
+    <!-- Users Tab -->
+    <div id="panel-users" class="hidden">
+      <h2 class="section-title">Manage Users</h2>
+      <div id="usersTableWrapper"></div>
+    </div>
+
+    <!-- Categories Tab -->
+    <div id="panel-categories" class="hidden">
+      <div class="flex-between mb-20">
+        <h2 class="section-title" style="margin-bottom:0;">Categories</h2>
+        <button class="btn btn-primary" onclick="addCategory()">+ Add Category</button>
+      </div>
+      <div id="categoriesTableWrapper"></div>
+    </div>
+
+    <!-- Venues Tab -->
+    <div id="panel-venues" class="hidden">
+      <div class="flex-between mb-20">
+        <h2 class="section-title" style="margin-bottom:0;">Venues</h2>
+        <button class="btn btn-primary" onclick="addVenue()">+ Add Venue</button>
+      </div>
+      <div id="venuesTableWrapper"></div>
+    </div>
+
+    <!-- Events Tab -->
+    <div id="panel-events" class="hidden">
+      <h2 class="section-title">All Events</h2>
+      <div id="allEventsTableWrapper"></div>
+    </div>
+  </main>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  requireAuth(['ADMIN']);
+
+  function showTab(tab) {
+    ['overview','users','categories','venues','events'].forEach(t => {
+      document.getElementById('panel-' + t).classList.toggle('hidden', t !== tab);
+      document.getElementById('tab-' + t).classList.toggle('active', t === tab);
+    });
+    if (tab === 'users') loadUsers();
+    if (tab === 'categories') loadCategories();
+    if (tab === 'venues') loadVenues();
+    if (tab === 'events') loadAllEvents();
+  }
+
+  async function loadStats() {
+    try {
+      const stats = await apiRequest('/admin/dashboard/stats');
+      document.getElementById('statsRow').innerHTML = `
+        <div class="stat-card"><div class="num">${stats.totalUsers}</div><div class="label">Total Users</div></div>
+        <div class="stat-card"><div class="num">${stats.totalEvents}</div><div class="label">Total Events</div></div>
+        <div class="stat-card"><div class="num">${stats.totalRegistrations}</div><div class="label">Total Bookings</div></div>
+      `;
+    } catch (e) { /* ignore */ }
+  }
+
+  async function loadUsers() {
+    const wrapper = document.getElementById('usersTableWrapper');
+    wrapper.innerHTML = '<p>Loading...</p>';
+    const users = await apiRequest('/users');
+    wrapper.innerHTML = `
+      <table>
+        <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${users.map(u => `
+            <tr>
+              <td>${u.name}</td>
+              <td>${u.email}</td>
+              <td>${u.role}</td>
+              <td>${u.enabled ? '<span class="badge badge-completed">Active</span>' : '<span class="badge badge-cancelled">Disabled</span>'}</td>
+              <td>
+                <button class="btn btn-sm btn-dark" onclick="toggleUser(${u.id})">${u.enabled ? 'Disable' : 'Enable'}</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteUser(${u.id})">Delete</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  async function toggleUser(id) {
+    await apiRequest(`/users/${id}/toggle-status`, 'PATCH');
+    loadUsers();
+  }
+  async function deleteUser(id) {
+    if (!confirm('Delete this user? This will also permanently delete any events they organized, plus all their bookings and reviews. This cannot be undone.')) return;
+    await apiRequest(`/users/${id}`, 'DELETE');
+    loadUsers();
+  }
+
+  async function loadCategories() {
+    const wrapper = document.getElementById('categoriesTableWrapper');
+    wrapper.innerHTML = '<p>Loading...</p>';
+    const categories = await apiRequest('/categories', 'GET', null, false);
+    wrapper.innerHTML = `
+      <table>
+        <thead><tr><th>Name</th><th>Description</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${categories.map(c => `
+            <tr>
+              <td>${c.name}</td>
+              <td>${c.description || ''}</td>
+              <td><button class="btn btn-sm btn-danger" onclick="deleteCategory(${c.id})">Delete</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  async function addCategory() {
+    const name = prompt('Category name:');
+    if (!name) return;
+    const description = prompt('Category description (optional):') || '';
+    await apiRequest('/categories', 'POST', { name, description });
+    loadCategories();
+  }
+  async function deleteCategory(id) {
+    if (!confirm('Delete this category?')) return;
+    await apiRequest(`/categories/${id}`, 'DELETE');
+    loadCategories();
+  }
+
+  async function loadVenues() {
+    const wrapper = document.getElementById('venuesTableWrapper');
+    wrapper.innerHTML = '<p>Loading...</p>';
+    const venues = await apiRequest('/venues', 'GET', null, false);
+    wrapper.innerHTML = `
+      <table>
+        <thead><tr><th>Name</th><th>Address</th><th>City</th><th>Capacity</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${venues.map(v => `
+            <tr>
+              <td>${v.name}</td>
+              <td>${v.address}</td>
+              <td>${v.city}</td>
+              <td>${v.capacity || '-'}</td>
+              <td><button class="btn btn-sm btn-danger" onclick="deleteVenue(${v.id})">Delete</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  async function addVenue() {
+    const name = prompt('Venue name:');
+    if (!name) return;
+    const address = prompt('Address:') || '';
+    const city = prompt('City:') || '';
+    const capacity = parseInt(prompt('Capacity:') || '100');
+    await apiRequest('/venues', 'POST', { name, address, city, capacity });
+    loadVenues();
+  }
+  async function deleteVenue(id) {
+    if (!confirm('Delete this venue?')) return;
+    await apiRequest(`/venues/${id}`, 'DELETE');
+    loadVenues();
+  }
+
+  async function loadAllEvents() {
+    const wrapper = document.getElementById('allEventsTableWrapper');
+    wrapper.innerHTML = '<p>Loading...</p>';
+    const events = await apiRequest('/events', 'GET', null, false);
+    wrapper.innerHTML = `
+      <table>
+        <thead><tr><th>Title</th><th>Organizer</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${events.map(ev => `
+            <tr>
+              <td>${ev.title}</td>
+              <td>${ev.organizer ? ev.organizer.name : '-'}</td>
+              <td>${formatDate(ev.eventDate)}</td>
+              <td>${statusBadge(ev.status)}</td>
+              <td><button class="btn btn-sm btn-danger" onclick="removeEvent(${ev.id})">Delete</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+  async function removeEvent(id) {
+    if (!confirm('Delete this event? This will also delete all its bookings and reviews. This cannot be undone.')) return;
+    await apiRequest(`/events/${id}`, 'DELETE');
+    loadAllEvents();
+  }
+
+  loadStats();
+</script>
+</body>
+</html>
